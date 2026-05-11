@@ -5,22 +5,14 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.0</version>
-        <relativePath/>
+        <groupId>com.insightai</groupId>
+        <artifactId>insightai</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
 
-    <groupId>com.insightai</groupId>
     <artifactId>ai-service</artifactId>
-    <version>1.0.0</version>
     <name>InsightAI AI Service</name>
     <description>AI-powered Business Intelligence Platform - AI Service</description>
-
-    <properties>
-        <java.version>17</java.version>
-        <spring-boot.version>3.2.0</spring-boot.version>
-    </properties>
 
     <dependencies>
         <!-- Spring Boot Web -->
@@ -45,6 +37,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Common module -->
+        <dependency>
+            <groupId>com.insightai</groupId>
+            <artifactId>common</artifactId>
         </dependency>
 
         <!-- JSON Processing -->

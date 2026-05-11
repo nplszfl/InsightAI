@@ -20,18 +20,14 @@
 
     <modules>
         <module>common</module>
-        <module>data-source-service</module>
-        <module>query-service</module>
-        <module>visualization-service</module>
-        <module>report-service</module>
-        <module>gateway</module>
+        <module>ai-service</module>
     </modules>
 
     <properties>
         <java.version>17</java.version>
         <spring-cloud.version>2023.0.1</spring-cloud.version>
         <mybatis-plus.version>3.5.6</mybatis-plus.version>
-        <spring-ai.version>1.0.0-M4</spring-ai.version>
+        <spring-ai.version>1.0.0-M5</spring-ai.version>
         <hutool.version>5.8.26</hutool.version>
         <lombok.version>1.18.32</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
