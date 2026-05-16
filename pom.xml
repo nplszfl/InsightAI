@@ -20,6 +20,11 @@
 
     <modules>
         <module>common</module>
+        <module>gateway</module>
+        <module>data-source-service</module>
+        <module>query-service</module>
+        <module>report-service</module>
+        <module>visualization-service</module>
         <module>ai-service</module>
     </modules>
 

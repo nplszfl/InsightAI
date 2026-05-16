@@ -1,0 +1,4 @@
+com/insightai/service/DataSourceService.class
+com/insightai/datasource/DataSourceServiceApplication.class
+com/insightai/repository/DataSourceRepository.class
+com/insightai/controller/DataSourceController.class

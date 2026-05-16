@@ -14,9 +14,8 @@ public class DataSourceDto {
     private String host;
     private Integer port;
     private String database;
+    private String username;
+    private String password;
     private String config;
     private Integer status;
-    
-    // Sensitive data - only returned on create/update
-    private String password;
 }
