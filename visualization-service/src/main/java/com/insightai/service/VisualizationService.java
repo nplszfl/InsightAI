@@ -1,43 +1,34 @@
 package com.insightai.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.insightai.common.model.Visualization;
+import com.insightai.repository.VisualizationRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 /**
  * Visualization Management Service
- * Handles chart/visualization creation and configuration
+ * Handles chart/visualization creation and configuration with MyBatis Plus persistence
  */
 @Slf4j
 @Service
-public class VisualizationService {
-
-    private final ConcurrentHashMap<Long, Visualization> visualizationStore = new ConcurrentHashMap<>();
-    private final AtomicLong idGenerator = new AtomicLong(1);
+public class VisualizationService extends ServiceImpl<VisualizationRepository, Visualization> {
 
     /**
      * Create a new visualization
      */
     public Visualization createVisualization(Visualization visualization) {
         log.info("Creating new visualization for report: {}", visualization.getReportId());
-        
-        Long vizId = idGenerator.getAndIncrement();
-        LocalDateTime now = LocalDateTime.now();
-        
-        visualization.setId(vizId);
-        visualization.setCreatedAt(now);
-        visualization.setUpdatedAt(now);
-        
-        visualizationStore.put(vizId, visualization);
-        
+
+        visualization.setCreatedAt(LocalDateTime.now());
+        visualization.setUpdatedAt(LocalDateTime.now());
+
+        this.save(visualization);
         return visualization;
     }
 
@@ -46,7 +37,8 @@ public class VisualizationService {
      */
     public Optional<Visualization> getVisualizationById(Long id) {
         log.info("Fetching visualization with ID: {}", id);
-        return Optional.ofNullable(visualizationStore.get(id));
+        Visualization viz = this.getById(id);
+        return Optional.ofNullable(viz);
     }
 
     /**
@@ -54,15 +46,10 @@ public class VisualizationService {
      */
     public List<Visualization> getVisualizationsByReportId(Long reportId) {
         log.info("Fetching visualizations for report: {}", reportId);
-        return visualizationStore.values().stream()
-                .filter(v -> reportId.equals(v.getReportId()))
-                .sorted((v1, v2) -> {
-                    if (v1.getPosition() == null && v2.getPosition() == null) return 0;
-                    if (v1.getPosition() == null) return 1;
-                    if (v2.getPosition() == null) return -1;
-                    return v1.getPosition().compareTo(v2.getPosition());
-                })
-                .collect(Collectors.toList());
+        return this.lambdaQuery()
+                .eq(Visualization::getReportId, reportId)
+                .orderByAsc(Visualization::getPosition)
+                .list();
     }
 
     /**
@@ -70,11 +57,11 @@ public class VisualizationService {
      */
     public Optional<Visualization> updateVisualization(Long id, Visualization dto) {
         log.info("Updating visualization with ID: {}", id);
-        Visualization existing = visualizationStore.get(id);
+        Visualization existing = this.getById(id);
         if (existing == null) {
             return Optional.empty();
         }
-        
+
         if (dto.getChartType() != null) {
             existing.setChartType(dto.getChartType());
         }
@@ -88,9 +75,8 @@ public class VisualizationService {
             existing.setPosition(dto.getPosition());
         }
         existing.setUpdatedAt(LocalDateTime.now());
-        
-        visualizationStore.put(id, existing);
-        
+
+        this.updateById(existing);
         return Optional.of(existing);
     }
 
@@ -99,7 +85,7 @@ public class VisualizationService {
      */
     public boolean deleteVisualization(Long id) {
         log.info("Deleting visualization with ID: {}", id);
-        return visualizationStore.remove(id) != null;
+        return this.removeById(id);
     }
 
     /**
@@ -107,7 +93,9 @@ public class VisualizationService {
      */
     public void deleteVisualizationsByReportId(Long reportId) {
         log.info("Deleting all visualizations for report: {}", reportId);
-        visualizationStore.entrySet().removeIf(entry -> reportId.equals(entry.getValue().getReportId()));
+        this.lambdaUpdate()
+                .eq(Visualization::getReportId, reportId)
+                .remove();
     }
 
     /**
@@ -116,10 +104,12 @@ public class VisualizationService {
     public void updatePositions(Long reportId, List<Long> visualizationIds) {
         log.info("Updating positions for {} visualizations in report: {}", visualizationIds.size(), reportId);
         for (int i = 0; i < visualizationIds.size(); i++) {
-            Visualization viz = visualizationStore.get(visualizationIds.get(i));
+            Long vizId = visualizationIds.get(i);
+            Visualization viz = this.getById(vizId);
             if (viz != null && reportId.equals(viz.getReportId())) {
                 viz.setPosition(i + 1);
                 viz.setUpdatedAt(LocalDateTime.now());
+                this.updateById(viz);
             }
         }
     }
@@ -136,13 +126,14 @@ public class VisualizationService {
      */
     public boolean reorderVisualizations(Long reportId, List<Long> orderedVizIds) {
         log.info("Reordering {} visualizations in report: {}", orderedVizIds.size(), reportId);
-        
+
         for (int i = 0; i < orderedVizIds.size(); i++) {
             Long vizId = orderedVizIds.get(i);
-            Visualization viz = visualizationStore.get(vizId);
+            Visualization viz = this.getById(vizId);
             if (viz != null && reportId.equals(viz.getReportId())) {
                 viz.setPosition(i + 1);
                 viz.setUpdatedAt(LocalDateTime.now());
+                this.updateById(viz);
             } else {
                 log.warn("Visualization {} not found or doesn't belong to report {}", vizId, reportId);
                 return false;

@@ -1,32 +1,39 @@
 package com.insightai.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.insightai.common.dto.QueryRequest;
 import com.insightai.common.dto.QueryResponse;
 import com.insightai.common.model.QueryCache;
 import com.insightai.common.model.QueryHistory;
+import com.insightai.repository.QueryCacheRepository;
+import com.insightai.repository.QueryHistoryRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Query Execution Service
- * Handles natural language and SQL query execution with caching
+ * Handles natural language and SQL query execution with MyBatis Plus persistence
  */
 @Slf4j
 @Service
-public class QueryService {
+public class QueryService extends ServiceImpl<QueryCacheRepository, QueryCache> {
 
-    // In-memory cache for demo purposes - use Redis in production
-    private final Map<String, QueryResponse> queryCache = new ConcurrentHashMap<>();
-    
-    // Query history storage
-    private final Map<String, QueryHistory> queryHistoryMap = new ConcurrentHashMap<>();
+    private final QueryHistoryRepository queryHistoryRepository;
+    private final Map<String, QueryResponse> memoryCache = new ConcurrentHashMap<>();
+
+    public QueryService(QueryHistoryRepository queryHistoryRepository) {
+        this.queryHistoryRepository = queryHistoryRepository;
+    }
 
     /**
      * Execute a query (natural language or SQL)
@@ -34,19 +41,22 @@ public class QueryService {
     public QueryResponse executeQuery(QueryRequest request) {
         log.info("Executing query in {} mode", request.getMode());
         long startTime = System.currentTimeMillis();
-        
-        String queryId = UUID.randomUUID().toString();
-        
+
+        String queryId = java.util.UUID.randomUUID().toString();
+
         // Check cache if enabled
         if (request.isUseCache()) {
-            QueryResponse cached = getCachedResponse(request.getQuery());
+            String cacheKey = generateCacheKey(request);
+            QueryResponse cached = getCachedResponse(cacheKey);
             if (cached != null) {
                 log.info("Cache hit for query: {}", request.getQuery());
+                cached.setQueryId(queryId);
                 cached.setCacheStatus("HIT");
+                cached.setExecutionTimeMs(System.currentTimeMillis() - startTime);
                 return cached;
             }
         }
-        
+
         // Process based on mode
         QueryResponse response;
         switch (request.getMode()) {
@@ -62,29 +72,40 @@ public class QueryService {
             default:
                 response = executeSqlQuery(request);
         }
-        
+
         response.setQueryId(queryId);
         response.setExecutionTimeMs(System.currentTimeMillis() - startTime);
         response.setCacheStatus("MISS");
-        
-        // Cache the result
+
+        // Cache the result in memory + DB
         if (request.isUseCache()) {
-            cacheResponse(request.getQuery(), response);
+            String cacheKey = generateCacheKey(request);
+            cacheResponse(cacheKey, response);
         }
-        
-        // Record history
+
+        // Record history in database
         recordQueryHistory(request, response);
-        
+
         return response;
     }
 
     /**
-     * Get query result by ID
+     * Get query result by ID from history
      */
     public Optional<QueryResponse> getQueryResult(String queryId) {
         log.info("Fetching query result for ID: {}", queryId);
-        // In a real implementation, this would query the repository
-        return Optional.empty();
+        QueryHistory history = queryHistoryRepository.selectById(queryId);
+        if (history == null) {
+            return Optional.empty();
+        }
+        return Optional.of(QueryResponse.builder()
+                .queryId(String.valueOf(history.getId()))
+                .executedQuery(history.getExecutePlan())
+                .executionTimeMs(history.getExecutionTimeMs())
+                .rowCount(history.getResultCount())
+                .status(history.getStatus())
+                .cacheStatus("HIT")
+                .build());
     }
 
     /**
@@ -92,16 +113,18 @@ public class QueryService {
      */
     public List<QueryHistory> getQueryHistory(Long dataSourceId, int limit) {
         log.info("Fetching query history for data source: {}, limit: {}", dataSourceId, limit);
-        // In a real implementation, this would query the repository
-        return List.of();
+        return queryHistoryRepository.findByDataSourceIdOrderByCreatedAtDesc(dataSourceId)
+                .stream().limit(limit).toList();
     }
 
     /**
-     * Clear query cache
+     * Clear query cache (both memory and DB)
      */
     public void clearCache() {
         log.info("Clearing query cache");
-        queryCache.clear();
+        memoryCache.clear();
+        // Delete old expired cache entries from DB
+        lambdaUpdate().remove();
     }
 
     /**
@@ -109,17 +132,27 @@ public class QueryService {
      */
     public void clearCacheForQuery(String query) {
         log.info("Clearing cache for query: {}", query);
-        queryCache.remove(query);
+        String cacheKey = query.toLowerCase().trim();
+        memoryCache.remove(cacheKey);
+        lambdaUpdate()
+                .eq(QueryCache::getCacheKey, cacheKey)
+                .remove();
     }
 
     /**
      * Get cache statistics
      */
     public Map<String, Object> getCacheStats() {
+        long total = this.count();
+        long memoryHits = memoryCache.values().stream()
+                .filter(r -> "HIT".equals(r.getCacheStatus())).count();
+        long memoryMisses = memoryCache.values().stream()
+                .filter(r -> "MISS".equals(r.getCacheStatus())).count();
         return Map.of(
-            "size", queryCache.size(),
-            "hits", queryCache.values().stream().filter(r -> "HIT".equals(r.getCacheStatus())).count(),
-            "misses", queryCache.values().stream().filter(r -> "MISS".equals(r.getCacheStatus())).count()
+            "dbCacheSize", total,
+            "memoryCacheSize", memoryCache.size(),
+            "memoryHits", memoryHits,
+            "memoryMisses", memoryMisses
         );
     }
 
@@ -160,17 +193,64 @@ public class QueryService {
                 .build();
     }
 
-    private QueryResponse getCachedResponse(String query) {
-        return queryCache.get(query);
+    private String generateCacheKey(QueryRequest request) {
+        try {
+            String input = (request.getQuery() + request.getDataSourceId() + request.getMode()).toLowerCase().trim();
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(input.getBytes());
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            return request.getQuery().toLowerCase().trim();
+        }
     }
 
-    private void cacheResponse(String query, QueryResponse response) {
-        queryCache.put(query, response);
+    private QueryResponse getCachedResponse(String cacheKey) {
+        // First check memory cache
+        QueryResponse memoryCached = memoryCache.get(cacheKey);
+        if (memoryCached != null) {
+            return memoryCached;
+        }
+        // Then check DB cache
+        QueryCache dbCached = this.lambdaQuery()
+                .eq(QueryCache::getCacheKey, cacheKey)
+                .one();
+        if (dbCached != null) {
+            // Increment hits
+            dbCached.setHits(dbCached.getHits() + 1);
+            this.updateById(dbCached);
+            // Parse cached result back to response
+            QueryResponse response = QueryResponse.builder()
+                    .executedQuery(dbCached.getQuerySignature())
+                    .status("SUCCESS")
+                    .cacheStatus("HIT")
+                    .build();
+            memoryCache.put(cacheKey, response);
+            return response;
+        }
+        return null;
+    }
+
+    private void cacheResponse(String cacheKey, QueryResponse response) {
+        // Store in memory cache
+        memoryCache.put(cacheKey, response);
+        // Store in DB cache
+        QueryCache cache = QueryCache.builder()
+                .cacheKey(cacheKey)
+                .querySignature(response.getExecutedQuery())
+                .resultSchema("{}")
+                .cachedResult("{}")
+                .hits(0L)
+                .ttlSeconds(3600L)
+                .freshnessLevel("REAL_TIME")
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .expiresAt(LocalDateTime.now().plusHours(1))
+                .build();
+        this.save(cache);
     }
 
     private void recordQueryHistory(QueryRequest request, QueryResponse response) {
         QueryHistory history = QueryHistory.builder()
-                .id(System.currentTimeMillis())
                 .dataSourceId(request.getDataSourceId())
                 .queryText(request.getQuery())
                 .normalizedQuery(request.getQuery().toLowerCase().trim())
@@ -180,6 +260,6 @@ public class QueryService {
                 .status(response.getStatus())
                 .createdAt(LocalDateTime.now())
                 .build();
-        queryHistoryMap.put(response.getQueryId(), history);
+        queryHistoryRepository.insert(history);
     }
 }

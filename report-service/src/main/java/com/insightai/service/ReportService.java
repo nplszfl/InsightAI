@@ -1,41 +1,34 @@
 package com.insightai.service;
 
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.insightai.common.dto.ReportDto;
 import com.insightai.common.model.Report;
-import com.insightai.common.model.Visualization;
+import com.insightai.repository.ReportRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
  * Report Management Service
- * Handles report creation, update, and retrieval with visualizations
+ * Handles report creation, update, and retrieval with MyBatis Plus persistence
  */
 @Slf4j
 @Service
-public class ReportService {
-
-    private final ConcurrentHashMap<Long, Report> reportStore = new ConcurrentHashMap<>();
-    private final AtomicLong idGenerator = new AtomicLong(1);
+public class ReportService extends ServiceImpl<ReportRepository, Report> {
 
     /**
      * Create a new report
      */
     public ReportDto createReport(ReportDto dto) {
         log.info("Creating new report: {}", dto.getName());
-        
-        Long reportId = idGenerator.getAndIncrement();
+
         LocalDateTime now = LocalDateTime.now();
-        
+
         Report report = Report.builder()
-                .id(reportId)
                 .name(dto.getName())
                 .type(dto.getType())
                 .config(dto.getConfig())
@@ -45,9 +38,8 @@ public class ReportService {
                 .updatedAt(now)
                 .status(1)
                 .build();
-        
-        reportStore.put(reportId, report);
-        
+
+        this.save(report);
         return toDto(report, dto.getVisualizations());
     }
 
@@ -56,7 +48,7 @@ public class ReportService {
      */
     public Optional<ReportDto> getReportById(Long id) {
         log.info("Fetching report with ID: {}", id);
-        Report report = reportStore.get(id);
+        Report report = this.getById(id);
         if (report == null) {
             return Optional.empty();
         }
@@ -68,7 +60,10 @@ public class ReportService {
      */
     public List<ReportDto> getAllReports() {
         log.info("Fetching all reports");
-        return reportStore.values().stream()
+        return this.lambdaQuery()
+                .orderByDesc(Report::getCreatedAt)
+                .list()
+                .stream()
                 .map(r -> toDto(r, List.of()))
                 .collect(Collectors.toList());
     }
@@ -78,11 +73,11 @@ public class ReportService {
      */
     public Optional<ReportDto> updateReport(Long id, ReportDto dto) {
         log.info("Updating report with ID: {}", id);
-        Report existing = reportStore.get(id);
+        Report existing = this.getById(id);
         if (existing == null) {
             return Optional.empty();
         }
-        
+
         if (dto.getName() != null) {
             existing.setName(dto.getName());
         }
@@ -96,9 +91,8 @@ public class ReportService {
             existing.setFilters(dto.getFilters());
         }
         existing.setUpdatedAt(LocalDateTime.now());
-        
-        reportStore.put(id, existing);
-        
+
+        this.updateById(existing);
         return Optional.of(toDto(existing, dto.getVisualizations()));
     }
 
@@ -107,7 +101,7 @@ public class ReportService {
      */
     public boolean deleteReport(Long id) {
         log.info("Deleting report with ID: {}", id);
-        return reportStore.remove(id) != null;
+        return this.removeById(id);
     }
 
     /**
@@ -115,8 +109,11 @@ public class ReportService {
      */
     public List<ReportDto> getReportsByType(String type) {
         log.info("Fetching reports of type: {}", type);
-        return reportStore.values().stream()
-                .filter(r -> type.equals(r.getType()))
+        return this.lambdaQuery()
+                .eq(Report::getType, type)
+                .orderByDesc(Report::getCreatedAt)
+                .list()
+                .stream()
                 .map(r -> toDto(r, List.of()))
                 .collect(Collectors.toList());
     }
@@ -126,8 +123,11 @@ public class ReportService {
      */
     public List<ReportDto> getReportsByUser(Long userId) {
         log.info("Fetching reports created by user: {}", userId);
-        return reportStore.values().stream()
-                .filter(r -> userId.equals(r.getCreatedBy()))
+        return this.lambdaQuery()
+                .eq(Report::getCreatedBy, userId)
+                .orderByDesc(Report::getCreatedAt)
+                .list()
+                .stream()
                 .map(r -> toDto(r, List.of()))
                 .collect(Collectors.toList());
     }
@@ -137,7 +137,7 @@ public class ReportService {
      */
     public boolean addVisualizationToReport(Long reportId, ReportDto.VisualizationDto visualization) {
         log.info("Adding visualization to report: {}", reportId);
-        Report report = reportStore.get(reportId);
+        Report report = this.getById(reportId);
         if (report == null) {
             return false;
         }
@@ -150,7 +150,7 @@ public class ReportService {
      */
     public boolean removeVisualizationFromReport(Long reportId, Long visualizationId) {
         log.info("Removing visualization {} from report: {}", visualizationId, reportId);
-        Report report = reportStore.get(reportId);
+        Report report = this.getById(reportId);
         if (report == null) {
             return false;
         }
