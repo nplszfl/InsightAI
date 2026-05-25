@@ -8,13 +8,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
  * Report Management Service
- * Handles report creation, update, and retrieval with MyBatis Plus persistence
+ * Handles report creation, update, retrieval, and scheduling with MyBatis Plus persistence
  */
 @Slf4j
 @Service
@@ -25,6 +27,9 @@ public class ReportService extends ServiceImpl<ReportRepository, Report> {
      */
     public ReportDto createReport(ReportDto dto) {
         log.info("Creating new report: {}", dto.getName());
+
+        // Validate
+        validateReport(dto, null);
 
         LocalDateTime now = LocalDateTime.now();
 
@@ -40,6 +45,8 @@ public class ReportService extends ServiceImpl<ReportRepository, Report> {
                 .build();
 
         this.save(report);
+        log.info("Created report with ID: {}", report.getId());
+
         return toDto(report, dto.getVisualizations());
     }
 
@@ -69,6 +76,20 @@ public class ReportService extends ServiceImpl<ReportRepository, Report> {
     }
 
     /**
+     * Get active reports only
+     */
+    public List<ReportDto> getActiveReports() {
+        log.info("Fetching active reports");
+        return this.lambdaQuery()
+                .eq(Report::getStatus, 1)
+                .orderByDesc(Report::getCreatedAt)
+                .list()
+                .stream()
+                .map(r -> toDto(r, List.of()))
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Update an existing report
      */
     public Optional<ReportDto> updateReport(Long id, ReportDto dto) {
@@ -76,6 +97,11 @@ public class ReportService extends ServiceImpl<ReportRepository, Report> {
         Report existing = this.getById(id);
         if (existing == null) {
             return Optional.empty();
+        }
+
+        // Validate if name is being changed
+        if (dto.getName() != null && !dto.getName().equals(existing.getName())) {
+            validateUniqueName(dto.getName(), id);
         }
 
         if (dto.getName() != null) {
@@ -97,11 +123,17 @@ public class ReportService extends ServiceImpl<ReportRepository, Report> {
     }
 
     /**
-     * Delete a report
+     * Delete a report (soft delete)
      */
     public boolean deleteReport(Long id) {
         log.info("Deleting report with ID: {}", id);
-        return this.removeById(id);
+        Report report = this.getById(id);
+        if (report == null) {
+            return false;
+        }
+        report.setStatus(0);
+        report.setUpdatedAt(LocalDateTime.now());
+        return this.updateById(report);
     }
 
     /**
@@ -156,6 +188,91 @@ public class ReportService extends ServiceImpl<ReportRepository, Report> {
         }
         // In a real implementation, this would remove from a visualization repository
         return true;
+    }
+
+    /**
+     * Enable a report
+     */
+    public boolean enableReport(Long id) {
+        log.info("Enabling report: {}", id);
+        Report report = this.getById(id);
+        if (report == null) {
+            return false;
+        }
+        report.setStatus(1);
+        report.setUpdatedAt(LocalDateTime.now());
+        return this.updateById(report);
+    }
+
+    /**
+     * Disable a report
+     */
+    public boolean disableReport(Long id) {
+        log.info("Disabling report: {}", id);
+        Report report = this.getById(id);
+        if (report == null) {
+            return false;
+        }
+        report.setStatus(0);
+        report.setUpdatedAt(LocalDateTime.now());
+        return this.updateById(report);
+    }
+
+    /**
+     * Get report statistics
+     */
+    public Map<String, Object> getStatistics() {
+        long total = this.count();
+        long active = this.count(this.lambdaQuery().eq(Report::getStatus, 1));
+        long inactive = total - active;
+
+        // Count by type
+        Map<String, Long> byType = new HashMap<>();
+        List<Report> allReports = this.list();
+        for (Report r : allReports) {
+            String type = r.getType() != null ? r.getType() : "UNKNOWN";
+            byType.put(type, byType.getOrDefault(type, 0L) + 1);
+        }
+
+        return Map.of(
+                "total", total,
+                "active", active,
+                "inactive", inactive,
+                "countByType", byType
+        );
+    }
+
+    /**
+     * Validate report data
+     */
+    public void validateReport(ReportDto dto, Long excludeId) {
+        if (dto.getName() == null || dto.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("Report name is required");
+        }
+        if (dto.getType() != null && !isValidReportType(dto.getType())) {
+            throw new IllegalArgumentException("Invalid report type. Must be DASHBOARD, SCHEDULED, or AD_HOC");
+        }
+        validateUniqueName(dto.getName(), excludeId);
+    }
+
+    /**
+     * Check if report type is valid
+     */
+    private boolean isValidReportType(String type) {
+        return "DASHBOARD".equals(type) || "SCHEDULED".equals(type) || "AD_HOC".equals(type);
+    }
+
+    /**
+     * Validate unique report name
+     */
+    private void validateUniqueName(String name, Long excludeId) {
+        var query = this.lambdaQuery().eq(Report::getName, name);
+        if (excludeId != null) {
+            query.ne(Report::getId, excludeId);
+        }
+        if (query.count() > 0) {
+            throw new IllegalArgumentException("Report with name '" + name + "' already exists");
+        }
     }
 
     private ReportDto toDto(Report entity, List<ReportDto.VisualizationDto> visualizations) {
