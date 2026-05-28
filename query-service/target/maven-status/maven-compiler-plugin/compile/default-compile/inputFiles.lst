@@ -1,3 +1,5 @@
 /Users/huanghuixiang/insightai/query-service/src/main/java/com/insightai/controller/QueryController.java
 /Users/huanghuixiang/insightai/query-service/src/main/java/com/insightai/query/QueryServiceApplication.java
+/Users/huanghuixiang/insightai/query-service/src/main/java/com/insightai/repository/QueryCacheRepository.java
+/Users/huanghuixiang/insightai/query-service/src/main/java/com/insightai/repository/QueryHistoryRepository.java
 /Users/huanghuixiang/insightai/query-service/src/main/java/com/insightai/service/QueryService.java

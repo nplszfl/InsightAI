@@ -1,3 +1,4 @@
-com/insightai/controller/ReportController.class
 com/insightai/report/ReportServiceApplication.class
+com/insightai/repository/ReportRepository.class
+com/insightai/controller/ReportController.class
 com/insightai/service/ReportService.class
