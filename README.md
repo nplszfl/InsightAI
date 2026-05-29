@@ -37,9 +37,14 @@ InsightAI 是一套**深度AI融合**的数据分析平台，对标Tableau/Power
 │  │ Visualization│ │ Report     │ │ AI Service          │  │
 │  │ Service     │ │ Service     │ │ (Java)              │  │
 │  └─────────────┘ └─────────────┘ └─────────────────────┘  │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐  │
+│  │ Forecasting │ │ Anomaly     │ │ NL Query            │  │
+│  │ Service     │ │ Detection   │ │ Service             │  │
+│  └─────────────┘ └─────────────┘ └─────────────────────┘  │
 ├─────────────────────────────────────────────────────────────┤
 │                    Java AI 服务层                           │
 │  (NL2SQL / VisualizationAI / Forecasting / AttributionAI)   │
+│  (AnomalyDetection / NaturalLanguageQuery)                  │
 ├─────────────────────────────────────────────────────────────┤
 │                    DeepSeek API                             │
 └─────────────────────────────────────────────────────────────┘
@@ -66,7 +71,22 @@ InsightAI/
 ├── data-source-service/             # 数据源管理
 ├── query-service/                   # 查询执行服务
 ├── visualization-service/           # 可视化服务
-├── report-service/                 # 报表服务
+├── report-service/                  # 报表服务
+├── forecasting-service/             # 预测分析服务 ⭐
+│   └── src/main/java/com/insightai/forecasting/
+│       ├── controller/             # REST API
+│       ├── service/                # 预测业务逻辑
+│       └── dto/                    # 数据传输对象
+├── anomaly-detection-service/       # 异常检测服务 ⭐
+│   └── src/main/java/com/insightai/anomaly/
+│       ├── controller/             # REST API
+│       ├── service/                # 检测业务逻辑
+│       └── dto/                    # 数据传输对象
+├── nl-query-service/               # 自然语言查询服务 ⭐
+│   └── src/main/java/com/insightai/nlquery/
+│       ├── controller/             # REST API
+│       ├── service/                # NLP业务逻辑
+│       └── dto/                    # 数据传输对象
 ├── gateway/                        # API网关
 ├── frontend/                       # Vue 3前端
 │   └── src/
@@ -208,6 +228,63 @@ POST /api/v1/ai/forecast
 }
 ```
 
+### 异常检测
+
+```
+POST /api/v1/anomaly/detect
+
+{
+  "metricName": "CPU使用率",
+  "dataPoints": [
+    {"timestamp": "2024-01-01 10:00", "value": 45},
+    {"timestamp": "2024-01-01 10:05", "value": 48},
+    ...
+  ],
+  "threshold": 0.95,
+  "detectionType": "realtime"
+}
+
+响应：
+{
+  "anomalies": [
+    {
+      "timestamp": "2024-01-01 11:30",
+      "value": 98.5,
+      "expectedValue": 50.2,
+      "severity": "high",
+      "description": "CPU使用率异常飙升"
+    }
+  ],
+  "alarmTriggered": true,
+  "alarmId": "alarm-2024-001"
+}
+```
+
+### 自然语言查询
+
+```
+POST /api/v1/nl/query
+
+{
+  "question": "上个月东北区域的销售额是多少？",
+  "databaseSchema": {
+    "sales": ["id", "amount", "date", "region", "product"]
+  },
+  "context": {"timeRange": "last_month", "region": "northeast"}
+}
+
+响应：
+{
+  "sql": "SELECT SUM(amount) FROM sales WHERE region='东北' AND date >= '2024-06-01' AND date <= '2024-06-30'",
+  "explanation": "根据您的问题，我理解您想查询东北区域上个月的销售额总和...",
+  "visualization": {
+    "type": "gauge",
+    "title": "东北区域上月销售额"
+  },
+  "confidence": 0.94
+}
+```
+
 ### 自动报告生成
 
 ```
@@ -251,7 +328,29 @@ POST /api/v1/ai/report/generate
 [归因分析] → 变化原因
     ↓
 [自动报告] → 完整分析报告
+    ↓
+[异常检测] → 实时告警
 ```
+
+## 🆕 新增服务模块
+
+### 🔮 forecasting-service (预测分析服务)
+- 时间序列预测
+- 趋势分析
+- 季节性检测
+- 多周期预测支持
+
+### ⚠️ anomaly-detection-service (异常检测服务)
+- 实时异常检测
+- 智能报警
+- 历史记录查询
+- 多指标监控
+
+### 💬 nl-query-service (自然语言查询服务)
+- NLP语义理解
+- SQL自动生成
+- 查询结果可视化
+- 多轮对话支持
 
 ## 🛠️ 技术栈
 
