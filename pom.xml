@@ -26,6 +26,9 @@
         <module>report-service</module>
         <module>visualization-service</module>
         <module>ai-service</module>
+        <module>forecasting-service</module>
+        <module>anomaly-detection-service</module>
+        <module>nl-query-service</module>
     </modules>
 
     <properties>
