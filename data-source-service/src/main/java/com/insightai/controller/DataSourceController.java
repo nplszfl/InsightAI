@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/datasources")
@@ -61,5 +62,43 @@ public class DataSourceController {
     @PostMapping("/test")
     public ResponseEntity<Boolean> testConnection(@RequestBody DataSourceDto dto) {
         return ResponseEntity.ok(dataSourceService.testConnection(dto));
+    }
+
+    @GetMapping("/url/{id}")
+    public ResponseEntity<String> getConnectionUrl(@PathVariable Long id) {
+        return dataSourceService.getConnectionUrlById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<DataSourceDto>> searchByName(@RequestParam String name) {
+        return ResponseEntity.ok(dataSourceService.searchByName(name));
+    }
+
+    @PostMapping("/{id}/refresh-config")
+    public ResponseEntity<Void> refreshConfig(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+        String newConfig = body.get("config");
+        if (newConfig == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return dataSourceService.refreshConfig(id, newConfig)
+                ? ResponseEntity.ok().build()
+                : ResponseEntity.notFound().build();
+    }
+
+    @PostMapping("/{id}/duplicate")
+    public ResponseEntity<DataSourceDto> duplicate(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+        String newName = body.get("name");
+        if (newName == null || newName.trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        return dataSourceService.duplicateDataSource(id, newName)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 }

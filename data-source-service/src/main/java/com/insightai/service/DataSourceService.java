@@ -267,29 +267,111 @@ public class DataSourceService extends ServiceImpl<DataSourceRepository, DataSou
         if (dto.getType() == null || dto.getHost() == null) {
             return Optional.empty();
         }
+        return Optional.ofNullable(buildConnectionUrl(dto.getType(), dto.getHost(), dto.getPort(), dto.getDatabase()));
+    }
 
-        String url;
-        switch (dto.getType().toUpperCase()) {
-            case "MYSQL":
-                int mysqlPort = dto.getPort() != null ? dto.getPort() : 3306;
-                url = String.format("jdbc:mysql://%s:%d/%s", dto.getHost(), mysqlPort,
-                        dto.getDatabase() != null ? dto.getDatabase() : "");
-                break;
-            case "POSTGRESQL":
-                int pgPort = dto.getPort() != null ? dto.getPort() : 5432;
-                url = String.format("jdbc:postgresql://%s:%d/%s", dto.getHost(), pgPort,
-                        dto.getDatabase() != null ? dto.getDatabase() : "");
-                break;
-            case "MONGODB":
-                int mongoPort = dto.getPort() != null ? dto.getPort() : 27017;
-                url = String.format("mongodb://%s:%d/%s", dto.getHost(), mongoPort,
-                        dto.getDatabase() != null ? dto.getDatabase() : "");
-                break;
-            default:
-                return Optional.empty();
+    /**
+     * Get connection URL by data source ID
+     */
+    public Optional<String> getConnectionUrlById(Long id) {
+        DataSource ds = this.getById(id);
+        if (ds == null || ds.getStatus() != 1) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(buildConnectionUrl(ds.getType(), ds.getHost(), ds.getPort(), ds.getDatabase()));
+    }
+
+    /**
+     * Search data sources by name (partial match)
+     */
+    public List<DataSourceDto> searchByName(String name) {
+        log.info("Searching data sources by name: {}", name);
+        return this.lambdaQuery()
+                .like(DataSource::getName, name)
+                .orderByDesc(DataSource::getCreatedAt)
+                .list()
+                .stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Refresh data source configuration
+     */
+    public boolean refreshConfig(Long id, String newConfig) {
+        log.info("Refreshing config for data source: {}", id);
+        DataSource ds = this.getById(id);
+        if (ds == null) {
+            return false;
+        }
+        ds.setConfig(newConfig);
+        ds.setUpdatedAt(LocalDateTime.now());
+        return this.updateById(ds);
+    }
+
+    /**
+     * Duplicate a data source with a new name
+     */
+    public Optional<DataSourceDto> duplicateDataSource(Long id, String newName) {
+        log.info("Duplicating data source: {} as {}", id, newName);
+        DataSource original = this.getById(id);
+        if (original == null) {
+            return Optional.empty();
         }
 
-        return Optional.of(url);
+        validateUniqueName(newName, null);
+
+        DataSource duplicate = DataSource.builder()
+                .name(newName)
+                .type(original.getType())
+                .host(original.getHost())
+                .port(original.getPort())
+                .database(original.getDatabase())
+                .username(original.getUsername())
+                .password(original.getPassword())
+                .config(original.getConfig())
+                .status(1)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        this.save(duplicate);
+        return Optional.of(toDto(duplicate));
+    }
+
+    private String buildConnectionUrl(String type, String host, Integer port, String database) {
+        if (type == null || host == null) {
+            return null;
+        }
+        int defaultPort;
+        String urlPrefix;
+        switch (type.toUpperCase()) {
+            case "MYSQL":
+                defaultPort = 3306;
+                urlPrefix = "jdbc:mysql://";
+                break;
+            case "POSTGRESQL":
+                defaultPort = 5432;
+                urlPrefix = "jdbc:postgresql://";
+                break;
+            case "MONGODB":
+                defaultPort = 27017;
+                urlPrefix = "mongodb://";
+                break;
+            case "ORACLE":
+                defaultPort = 1521;
+                urlPrefix = "jdbc:oracle:thin:@";
+                break;
+            case "SQLSERVER":
+                defaultPort = 1433;
+                urlPrefix = "jdbc:sqlserver://";
+                break;
+            default:
+                return null;
+        }
+        int actualPort = port != null ? port : defaultPort;
+        String db = database != null ? database : "";
+        return urlPrefix + host + ":" + actualPort + "/" + db;
     }
 
     /**

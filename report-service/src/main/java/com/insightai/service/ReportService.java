@@ -243,6 +243,104 @@ public class ReportService extends ServiceImpl<ReportRepository, Report> {
     }
 
     /**
+     * Search reports by name (partial match)
+     */
+    public List<ReportDto> searchByName(String name) {
+        log.info("Searching reports by name: {}", name);
+        return this.lambdaQuery()
+                .like(Report::getName, name)
+                .orderByDesc(Report::getCreatedAt)
+                .list()
+                .stream()
+                .map(r -> toDto(r, List.of()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Clone/duplicate a report with a new name
+     */
+    public Optional<ReportDto> cloneReport(Long id, String newName) {
+        log.info("Cloning report: {} as {}", id, newName);
+        Report original = this.getById(id);
+        if (original == null) {
+            return Optional.empty();
+        }
+
+        validateUniqueName(newName, null);
+
+        Report clone = Report.builder()
+                .name(newName)
+                .type(original.getType())
+                .config(original.getConfig())
+                .filters(original.getFilters())
+                .createdBy(original.getCreatedBy())
+                .status(1)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+
+        this.save(clone);
+        log.info("Cloned report with new ID: {}", clone.getId());
+        return Optional.of(toDto(clone, List.of()));
+    }
+
+    /**
+     * Publish a report (make it publicly available)
+     */
+    public boolean publishReport(Long id) {
+        log.info("Publishing report: {}", id);
+        Report report = this.getById(id);
+        if (report == null) {
+            return false;
+        }
+        report.setStatus(1);
+        report.setUpdatedAt(LocalDateTime.now());
+        return this.updateById(report);
+    }
+
+    /**
+     * Unpublish a report (make it private)
+     */
+    public boolean unpublishReport(Long id) {
+        log.info("Unpublishing report: {}", id);
+        Report report = this.getById(id);
+        if (report == null) {
+            return false;
+        }
+        report.setStatus(0);
+        report.setUpdatedAt(LocalDateTime.now());
+        return this.updateById(report);
+    }
+
+    /**
+     * Get scheduled reports (reports ready to be executed)
+     */
+    public List<ReportDto> getScheduledReports() {
+        log.info("Fetching scheduled reports");
+        return this.lambdaQuery()
+                .eq(Report::getStatus, 1)
+                .eq(Report::getType, "SCHEDULED")
+                .orderByDesc(Report::getCreatedAt)
+                .list()
+                .stream()
+                .map(r -> toDto(r, List.of()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Count reports by type
+     */
+    public Map<String, Long> countByType() {
+        Map<String, Long> byType = new HashMap<>();
+        List<Report> allReports = this.list();
+        for (Report r : allReports) {
+            String type = r.getType() != null ? r.getType() : "UNKNOWN";
+            byType.put(type, byType.getOrDefault(type, 0L) + 1);
+        }
+        return byType;
+    }
+
+    /**
      * Validate report data
      */
     public void validateReport(ReportDto dto, Long excludeId) {

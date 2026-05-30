@@ -53,4 +53,29 @@ public class QueryController {
     public ResponseEntity<Map<String, Object>> getCacheStats() {
         return ResponseEntity.ok(queryService.getCacheStats());
     }
+
+    @DeleteMapping("/history/{id}")
+    public ResponseEntity<Void> deleteHistory(@PathVariable Long id) {
+        return queryService.deleteQueryHistory(id)
+                ? ResponseEntity.ok().build()
+                : ResponseEntity.notFound().build();
+    }
+
+    @DeleteMapping("/history/datasource/{dataSourceId}")
+    public ResponseEntity<Void> clearHistoryForDataSource(@PathVariable Long dataSourceId) {
+        queryService.clearHistoryForDataSource(dataSourceId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/failed/{dataSourceId}")
+    public ResponseEntity<List<QueryHistory>> getFailedQueries(
+            @PathVariable Long dataSourceId,
+            @RequestParam(defaultValue = "50") int limit) {
+        return ResponseEntity.ok(queryService.getFailedQueries(dataSourceId, limit));
+    }
+
+    @GetMapping("/stats/{dataSourceId}")
+    public ResponseEntity<Map<String, Object>> getQueryStats(@PathVariable Long dataSourceId) {
+        return ResponseEntity.ok(queryService.getQueryStats(dataSourceId));
+    }
 }

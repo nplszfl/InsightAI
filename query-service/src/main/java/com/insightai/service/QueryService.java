@@ -156,6 +156,57 @@ public class QueryService extends ServiceImpl<QueryCacheRepository, QueryCache> 
         );
     }
 
+    /**
+     * Delete query history by ID
+     */
+    public boolean deleteQueryHistory(Long id) {
+        log.info("Deleting query history: {}", id);
+        return queryHistoryRepository.deleteById(id) > 0;
+    }
+
+    /**
+     * Clear query history for a data source
+     */
+    public int clearHistoryForDataSource(Long dataSourceId) {
+        log.info("Clearing query history for data source: {}", dataSourceId);
+        LambdaQueryWrapper<QueryHistory> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(QueryHistory::getDataSourceId, dataSourceId);
+        return queryHistoryRepository.delete(wrapper);
+    }
+
+    /**
+     * Get failed queries for debugging
+     */
+    public List<QueryHistory> getFailedQueries(Long dataSourceId, int limit) {
+        log.info("Fetching failed queries for data source: {}", dataSourceId);
+        return queryHistoryRepository.findByDataSourceIdOrderByCreatedAtDesc(dataSourceId)
+                .stream()
+                .filter(h -> "FAILED".equals(h.getStatus()))
+                .limit(limit)
+                .toList();
+    }
+
+    /**
+     * Get query statistics for a data source
+     */
+    public Map<String, Object> getQueryStats(Long dataSourceId) {
+        List<QueryHistory> history = queryHistoryRepository.findByDataSourceIdOrderByCreatedAtDesc(dataSourceId);
+        long total = history.size();
+        long success = history.stream().filter(h -> "SUCCESS".equals(h.getStatus())).count();
+        long failed = history.stream().filter(h -> "FAILED".equals(h.getStatus())).count();
+        double avgTime = history.stream()
+                .filter(h -> h.getExecutionTimeMs() != null)
+                .mapToLong(QueryHistory::getExecutionTimeMs)
+                .average()
+                .orElse(0.0);
+        return Map.of(
+            "totalQueries", total,
+            "successful", success,
+            "failed", failed,
+            "averageExecutionTimeMs", avgTime
+        );
+    }
+
     private QueryResponse processNaturalLanguageQuery(QueryRequest request) {
         log.info("Processing natural language query: {}", request.getQuery());
         // In a real implementation, this would call the AI service to convert NL to SQL

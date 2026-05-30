@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/reports")
@@ -72,5 +73,47 @@ public class ReportController {
         return reportService.removeVisualizationFromReport(reportId, vizId)
                 ? ResponseEntity.ok().build()
                 : ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<ReportDto>> searchByName(@RequestParam String name) {
+        return ResponseEntity.ok(reportService.searchByName(name));
+    }
+
+    @PostMapping("/{id}/clone")
+    public ResponseEntity<ReportDto> cloneReport(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+        String newName = body.get("name");
+        if (newName == null || newName.trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        return reportService.cloneReport(id, newName)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/{id}/publish")
+    public ResponseEntity<Void> publishReport(@PathVariable Long id) {
+        return reportService.publishReport(id)
+                ? ResponseEntity.ok().build()
+                : ResponseEntity.notFound().build();
+    }
+
+    @PostMapping("/{id}/unpublish")
+    public ResponseEntity<Void> unpublishReport(@PathVariable Long id) {
+        return reportService.unpublishReport(id)
+                ? ResponseEntity.ok().build()
+                : ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/scheduled")
+    public ResponseEntity<List<ReportDto>> getScheduledReports() {
+        return ResponseEntity.ok(reportService.getScheduledReports());
+    }
+
+    @GetMapping("/stats/by-type")
+    public ResponseEntity<Map<String, Long>> getCountByType() {
+        return ResponseEntity.ok(reportService.countByType());
     }
 }
