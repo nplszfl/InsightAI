@@ -344,6 +344,9 @@ public class ReportService extends ServiceImpl<ReportRepository, Report> {
      * Validate report data
      */
     public void validateReport(ReportDto dto, Long excludeId) {
+        if (dto == null) {
+            throw new IllegalArgumentException("Report must not be null");
+        }
         if (dto.getName() == null || dto.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Report name is required");
         }
@@ -354,9 +357,10 @@ public class ReportService extends ServiceImpl<ReportRepository, Report> {
     }
 
     /**
-     * Check if report type is valid
+     * Check if report type is valid. Public so tests and external callers can
+     * introspect the supported type catalogue.
      */
-    private boolean isValidReportType(String type) {
+    public boolean isValidReportType(String type) {
         return "DASHBOARD".equals(type) || "SCHEDULED".equals(type) || "AD_HOC".equals(type);
     }
 

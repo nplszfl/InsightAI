@@ -29,6 +29,7 @@
         <module>forecasting-service</module>
         <module>anomaly-detection-service</module>
         <module>nl-query-service</module>
+        <module>dashboard-service</module>
     </modules>
 
     <properties>
