@@ -1,6 +1,0 @@
-com/insightai/service/QueryService$1.class
-com/insightai/controller/QueryController.class
-com/insightai/service/QueryService.class
-com/insightai/repository/QueryCacheRepository.class
-com/insightai/repository/QueryHistoryRepository.class
-com/insightai/query/QueryServiceApplication.class
