@@ -11,14 +11,20 @@ import java.util.Map;
 @AllArgsConstructor
 public class NlQueryResponse {
     private Long id;
+    private String sessionId;
     private String originalQuery;
+    /** Query after coreference resolution has been applied. */
+    private String resolvedQuery;
     private String generatedSql;
     private String intent;
     private String queryStatus;
     private String errorMessage;
+    private Boolean sqlSafe;
+    /** When SQL is rejected this carries the validator's reason. */
+    private List<String> sqlViolations;
     private VisualizationData visualization;
     private LocalDateTime timestamp;
-    
+
     @Data
     @Builder
     @NoArgsConstructor
